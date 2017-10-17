@@ -17,7 +17,7 @@ class RandomAgent:
         self.session.run(init)
 
     def compute_action(self, state):
-        return self.session.run(self.score_function, feed_dict={self.board_state: state})
+        return self.session.run(tf.argmax(self.score_function), feed_dict={self.board_state: state})
 
     def score_actions(self, state):
         dist = Dirichlet([0.25, 0.25, 0.25, 0.25])
