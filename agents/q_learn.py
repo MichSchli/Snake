@@ -17,18 +17,21 @@ class QLearnAgent:
         self.batch_board_state = tf.placeholder(tf.float32, [None, board_shape[0],  board_shape[1]])
         self.actual_next_q = tf.placeholder(tf.float32, [None,4])
 
-        self.C1 = tf.Variable(tf.random_uniform([3,3, 1, hidden_dim], minval=-0.1, maxval=0.1))
-        self.C2 = tf.Variable(tf.random_uniform([3,3, hidden_dim, hidden_dim], minval=-0.1, maxval=0.1))
+        c1_glorot_var = np.sqrt(6)/np.sqrt(3*3 + hidden_dim)
+        c2_glorot_var = np.sqrt(6)/np.sqrt(3*3*hidden_dim + hidden_dim)
 
-        self.E = tf.Variable(tf.random_uniform([4, embedding_dim], minval=-0.1, maxval=0.1))
-        self.W1 = tf.Variable(tf.random_uniform([board_shape[0]*board_shape[1]*hidden_dim, hidden_dim], minval=-0.1, maxval=0.1))
-        self.b1 = tf.Variable(tf.random_uniform([hidden_dim], minval=-0.1, maxval=0.1))
+        self.C1 = tf.Variable(tf.random_uniform([3,3, 1, hidden_dim], minval=-c1_glorot_var, maxval=c1_glorot_var))
+        self.c1_bias = tf.Variable(tf.zeros([hidden_dim]))
+        self.C2 = tf.Variable(tf.random_uniform([3,3, hidden_dim, hidden_dim], minval=-c2_glorot_var, maxval=c2_glorot_var))
+        self.c2_bias = tf.Variable(tf.zeros([hidden_dim]))
 
-        self.W2 = tf.Variable(tf.random_uniform([hidden_dim, hidden_dim]))
-        self.b2 = tf.Variable(tf.random_uniform([hidden_dim]))
+        w1_glorot_var = np.sqrt(6)/np.sqrt(board_shape[0]*board_shape[1]*hidden_dim + hidden_dim)
+        self.W1 = tf.Variable(tf.random_uniform([board_shape[0]*board_shape[1]*hidden_dim, hidden_dim], minval=-w1_glorot_var, maxval=w1_glorot_var))
+        self.b1 = tf.Variable(tf.zeros([hidden_dim]))
 
-        self.W3 = tf.Variable(tf.random_uniform([hidden_dim, 4], minval=-0.1, maxval=0.1))
-        self.b3 = tf.Variable(tf.random_uniform([4]))
+        w2_glorot_var = np.sqrt(6) / np.sqrt(hidden_dim + 4)
+        self.W2 = tf.Variable(tf.random_uniform([hidden_dim, 4], minval=-w2_glorot_var, maxval=w2_glorot_var))
+        self.b2 = tf.Variable(tf.zeros([4]))
 
         self.score_function = self.score_actions(tf.expand_dims(self.board_state,0))
         self.batch_score_function = self.score_actions(self.batch_board_state, self.batch_size)
@@ -88,16 +91,14 @@ class QLearnAgent:
         return tf.argmax(self.score_function)
 
     def score_actions(self, state, batch_size=1):
-        #embedding = tf.nn.embedding_lookup(self.E, state)
         state = tf.expand_dims(state, -1)
 
-        l1 = tf.nn.relu(tf.nn.conv2d(state, self.C1, [1,1,1,1], "SAME"))
-        l2 = tf.nn.relu(tf.nn.conv2d(l1, self.C2, [1,1,1,1], "SAME"))
+        l1 = tf.nn.relu(tf.nn.conv2d(state, self.C1, [1,1,1,1], "SAME") + self.c1_bias)
+        l2 = tf.nn.relu(tf.nn.conv2d(l1, self.C2, [1,1,1,1], "SAME") + self.c2_bias)
 
         flat_embedding = tf.reshape(l2, [batch_size, -1])
         hidden = tf.nn.relu(tf.matmul(flat_embedding, self.W1) + self.b1)
-        #hidden_2 = tf.nn.relu(tf.matmul(hidden, self.W2) + self.b2)
-        return tf.squeeze(tf.matmul(hidden, self.W3))
+        return tf.squeeze(tf.matmul(hidden, self.W2)) + self.b2
 
     def loss(self, actual_next_q):
         predicted_next_q = self.batch_score_function
@@ -105,7 +106,7 @@ class QLearnAgent:
         return loss
 
     def update(self):
-        parameters_to_optimize = [self.W1, self.W3, self.E, self.C1, self.C2, self.b1]
+        parameters_to_optimize = [self.W1, self.W2, self.C1, self.C2, self.b1, self.b2]
         opt_func = tf.train.RMSPropOptimizer(learning_rate=0.001)
         grad_func = tf.gradients(self.loss_function, parameters_to_optimize)
         return opt_func.minimize(self.loss_function) #.apply_gradients(zip(grad_func, parameters_to_optimize))
